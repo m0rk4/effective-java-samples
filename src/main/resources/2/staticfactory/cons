@@ -1,0 +1,2 @@
+1. Can't be inherited with no public/protected constructors (composition over inheritance :) ?)
+2. Sometimes hard to differ from general purpose static methods (javadoc, naming strategy ?)
