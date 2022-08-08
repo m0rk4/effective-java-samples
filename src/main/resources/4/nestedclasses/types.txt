@@ -1,0 +1,4 @@
+1. Inner static class
+2. Inner non-static class
+3. Anonymous (see IntArrays.java)
+4. Local (Tuple record in java > 14?)
