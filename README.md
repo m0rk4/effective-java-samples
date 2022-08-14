@@ -34,7 +34,18 @@ _Represents a diary in the format of git commits + README quick reference_
     - [24. Type bound with wildcards](#24-type-bound-with-wildcards)
     - [25. Typesafe heterogeneous containers](#25-typesafe-heterogeneous-containers)
 - [6. Enums and annotations](#6-enums-and-annotations)
-    
+    - [26. Use Enums instead of int constants](#26-use-enums-instead-of-int-constants)
+    - [27. Use instance fields instead of ordinals](#27-use-instance-fields-instead-of-ordinals)
+    - [28. Use EnumSet instead of bit fields](#28-use-enumset-instead-of-bit-fields)
+    - [29. Use EnumMap instead of ordinal indexing](#29-use-enummap-instead-of-ordinal-indexing)
+    - [30. Emulate enum extension by using interfaces](#30-emulate-enum-extension-by-using-interfaces)
+    - [31. Use annotations instead over naming conventions (e.g. void testMethod -> @Test void testMethod)](#31-use-annotations-instead-over-naming-conventions-eg-void-testmethod---test-void-testmthod)
+    - [32. Interface marker or annotation marker?](#32-interface-marker-or-annotation-marker)
+- [7. Lambdas and streams](#7-lambdas-and-streams)
+    - [33. Lambdas over anonymous classes](#33-lambdas-over-anonymous-classes)
+    - [34. Prefer method references over lambdas (not always)](#34-prefer-method-references-over-lambdas-not-always)
+- [8. Methods](#8-methods)
+
 # 2. Creating and destroying objects
 ## 1. Use static factory methods
 
@@ -583,3 +594,387 @@ public class RecursiveTypeBound {
 ```
 
 # 6. Enums and Annotations
+## 26. Use Enums instead of int constants
+Try Avoiding switch (i.e. avoid 'all-actions-method')
+```java
+    /**
+     * Switch is applicable when:
+     * 1. Enum is NOT UNDER OUR CONTROL
+     * 2. ENUM is UNDER OUR CONTROL but the method ISN'T USEFUL ENOUGH TO BE IN ENUM
+     */
+    public static Operation inverse(Operation op) {
+        return switch (op) {
+            case PLUS -> Operation.MINUS;
+            case MINUS -> Operation.PLUS;
+            case TIMES -> Operation.DIVIDE;
+            case DIVIDE -> Operation.TIMES;
+        };
+    }
+```
+
+*Benefits*
+```java
+/**
+ * 1. Final class
+ * 2. Singleton
+ * 3. Exports static final instance member
+ */
+public enum Planet {
+    MERCURY(3.302e+23, 2.439e6),
+    VENUS(4.869e+24, 6.052e6),
+    EARTH(5.975e+24, 6.378e6),
+    MARS(6.419e+23, 3.393e6),
+    JUPITER(1.899e+27, 7.149e7),
+    SATURN(5.685e+26, 6.027e7),
+    URANUS(8.683e+25, 2.556e7),
+    NEPTUNE(1.024e+26, 2.477e7);
+
+    private final double mass;
+    private final double radius;
+    private final double surfaceGravity;
+
+    private static final double G = 6.67300E-11;
+
+    Planet(double mass, double radius) {
+        this.mass = mass;
+        this.radius = radius;
+        this.surfaceGravity = G * mass / (radius * radius);
+    }
+
+    public double mass() {
+        return mass;
+    }
+
+    public double radius() {
+        return radius;
+    }
+
+    public double surfaceGravity() {
+        return surfaceGravity;
+    }
+
+    public double surfaceWeight(double mass) {
+        return mass * surfaceGravity;
+    }
+}
+```
+
+```java
+// Enum type with constant-specific class bodies and data
+public enum Operation {
+    PLUS("+") {
+        public double apply(double x, double y) { return x + y; }
+    },
+    MINUS("-") {
+        public double apply(double x, double y) { return x - y; }
+    },
+    TIMES("*") {
+        public double apply(double x, double y) { return x * y; }
+    },
+    DIVIDE("/") {
+        public double apply(double x, double y) { return x / y; }
+    };
+
+    private final String symbol;
+
+    Operation(String symbol) {
+        // Can't access static member from constructor
+        // stringToEnum;
+        this.symbol = symbol;
+    }
+
+    @Override public String toString() { return symbol; }
+
+    public abstract double apply(double x, double y);
+
+    // Implementing a fromString method on an enum type
+    private static final Map<String, Operation> stringToEnum =
+            Stream.of(values()).collect(
+                    toMap(Object::toString, e -> e));
+
+    // Returns Operation for string, if any
+    public static Optional<Operation> fromString(String symbol) {
+        return Optional.ofNullable(stringToEnum.get(symbol));
+    }
+}
+```
+
+**Strategy-enum pattern**
+```java
+public enum PayrollDay {
+    MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY,
+    SATURDAY(PayType.WEEKEND), SUNDAY(PayType.WEEKEND);
+
+    private final PayType payType;
+
+    PayrollDay(PayType payType) {
+        this.payType = payType;
+    }
+
+    PayrollDay() {
+        this(PayType.WEEKDAY);
+    }
+
+    public int pay(int minutesWorked, int payRate) {
+        return this.payType.pay(minutesWorked, payRate);
+    }
+
+    /**
+     * Strategy enum
+     * Useful when some constants share same behaviour
+     */
+    private enum PayType {
+        WEEKDAY {
+            int overtimePay(int minsWorked, int payRate) {
+                return minsWorked <= MINS_PER_SHIFT ? 0 :
+                        (minsWorked - MINS_PER_SHIFT) * payRate / 2;
+            }
+        },
+        WEEKEND {
+            int overtimePay(int minsWorked, int payRate) {
+                return minsWorked * payRate / 2;
+            }
+        };
+
+        private static final int MINS_PER_SHIFT = 8 * 60;
+
+        abstract int overtimePay(int minutesWorked, int payRate);
+
+        public int pay(int minutesWorked, int payRate) {
+            int basePay = minutesWorked * payRate;
+            return basePay + overtimePay(minutesWorked, payRate);
+        }
+    }
+}
+```
+
+## 27. Use instance fields instead of ordinals
+```java
+// Enum with integer data stored in an instance field
+public enum Ensemble {
+    SOLO(1), DUET(2), TRIO(3), QUARTET(4), QUINTET(5),
+    SEXTET(6), SEPTET(7), OCTET(8), DOUBLE_QUARTET(8),
+    NONET(9), DECTET(10), TRIPLE_QUARTET(12);
+
+    private final int numberOfMusicians;
+
+    Ensemble(int size) {
+        this.numberOfMusicians = size;
+    }
+
+    public int numberOfMusicians() {
+        return numberOfMusicians;
+    }
+
+    /**
+     * BAD! never do so
+     */
+//    public int numberOfMusicians() { return ordinal() + 1; }
+}
+```
+
+## 28. Use EnumSet instead of bit fields
+```java
+// EnumSet - a modern replacement for bit fields
+public class Text {
+    public enum Style {BOLD, ITALIC, UNDERLINE, STRIKETHROUGH}
+
+    // Any Set could be passed in, but EnumSet is clearly best
+    public void applyStyles(Set<Style> styles) {
+        System.out.printf("Applying styles %s to text%n",
+                Objects.requireNonNull(styles));
+    }
+
+    // Sample use
+    public static void main(String[] args) {
+        Text text = new Text();
+        /*
+        EnumSet uses same bit fields under the hood, but its API is safe and well formed!
+         */
+        text.applyStyles(EnumSet.of(Style.BOLD, Style.ITALIC));
+    }
+}
+```
+
+## 29. Use EnumMap instead of ordinal indexing
+```java
+    public static void main(String[] args) {
+        Plant[] garden = {
+                new Plant("Basil", LifeCycle.ANNUAL),
+                new Plant("Carroway", LifeCycle.BIENNIAL),
+                new Plant("Dill", LifeCycle.ANNUAL),
+                new Plant("Lavendar", LifeCycle.PERENNIAL),
+                new Plant("Parsley", LifeCycle.BIENNIAL),
+                new Plant("Rosemary", LifeCycle.PERENNIAL)
+        };
+
+        // Using ordinal() to index into an array - DON'T DO THIS!
+        Set<Plant>[] plantsByLifeCycleArr =
+                (Set<Plant>[]) new Set[Plant.LifeCycle.values().length];
+        for (int i = 0; i < plantsByLifeCycleArr.length; i++)
+            plantsByLifeCycleArr[i] = new HashSet<>();
+        for (Plant p : garden)
+            plantsByLifeCycleArr[p.lifeCycle.ordinal()].add(p);
+        // Print the results
+        for (int i = 0; i < plantsByLifeCycleArr.length; i++) {
+            System.out.printf("%s: %s%n",
+                    Plant.LifeCycle.values()[i], plantsByLifeCycleArr[i]);
+        }
+
+        // Using an EnumMap to associate data with an enum (Page 172)
+        Map<LifeCycle, Set<Plant>> plantsByLifeCycle =
+                new EnumMap<>(Plant.LifeCycle.class);
+        for (Plant.LifeCycle lc : Plant.LifeCycle.values())
+            plantsByLifeCycle.put(lc, new HashSet<>());
+        for (Plant p : garden)
+            plantsByLifeCycle.get(p.lifeCycle).add(p);
+        System.out.println(plantsByLifeCycle);
+
+        // Naive stream-based approach - unlikely to produce an EnumMap!
+        System.out.println(Arrays.stream(garden)
+                .collect(groupingBy(p -> p.lifeCycle)));
+
+        // Using a stream and an EnumMap to associate data with an enum
+        System.out.println(Arrays.stream(garden)
+                .collect(groupingBy(p -> p.lifeCycle,
+                        () -> new EnumMap<>(LifeCycle.class), toSet())));
+    }
+```
+
+## 30. Emulate enum extension by using interfaces
+```java
+	public interface Operation{
+		double apply(double x, double y);
+	}
+	public enum BasicOperation implements Operation{
+		PLUS("+"){
+			public double apply(double x, double y) {return x + y}
+		},
+		MINUS("-"){...},TIMES("*"){...},DIVIDE("/"){...};
+
+		private final String symbol;
+		BasicOperation(String symbol){
+			this.symbol = symbol;
+		}
+		@Override
+		public String toString(){ return symbol; }
+	}
+```
+
+## 31. Use annotations instead over naming conventions (e.g. void testMethod -> @Test void testMthod)
+`@Retention` and `@Target` are _meta-annotations_  
+
+__Retention RetentionPolicies__
+
+| Enum    | Description                              |
+|:--------|:-----------------------------------------|
+| CLASS   | Retain only at compile time, not runtime |
+| RUNTIME | Retain at compile and also runtime       |
+| SOURCE  | Discard by the compiler                  |
+
+__Target ElementTypes__
+
+| Enum            | Valid on...                                        |
+|:----------------|:---------------------------------------------------|
+| ANNOTATION_TYPE | Annotation type declaration                        |
+| CONSTRUCTOR     | constructors                                       |
+| FIELD           | the field (includes also enum constants)           |
+| LOCAL_VARIABLE  | local variables                                    |
+| METHOD          | methods                                            |
+| PACKAGE         | packages                                           |
+| PARAMETER       | parameter declaration                              |
+| TYPE            | class, interface, annotation and enums declaration |
+| TYPE_PARAMETER  | type parameter declarations                        |
+| TYPE_USE        | the use of a specific type                         |
+
+** Process annotations using refection API **
+
+## 32. Interface marker or annotation marker?
+Marker interface in Java is interfaces with no field or methods or in simple word empty interface in java is called marker interface.
+
+* Marker interfaces define a type that is implemented by instances of the marked class; marker annotations do not. (Catch errors in compile time).
+* They can be targeted more precisely than marker annotations.
+* It's possible to add more information to an annotation type after it is already in use.
+
+# 7. Lambdas and streams
+## 33. Lambdas over anonymous classes
+
+```java
+// Enum with function object fields & constant-specific behavior
+public enum Operation {
+    PLUS("+", (x, y) -> x + y),
+    MINUS("-", (x, y) -> x - y),
+    TIMES("*", (x, y) -> x * y),
+    DIVIDE("/", (x, y) -> x / y);
+
+    private final String symbol;
+    private final DoubleBinaryOperator op;
+
+    Operation(String symbol, DoubleBinaryOperator op) {
+        this.symbol = symbol;
+        this.op = op;
+    }
+
+    @Override
+    public String toString() {
+        return symbol;
+    }
+
+    public double apply(double x, double y) {
+        return op.applyAsDouble(x, y);
+    }
+}
+```
+```java
+// Sorting with function objects
+public class SortFourWays {
+    public static void main(String[] args) {
+        List<String> words = Arrays.asList(args);
+
+        // Anonymous class instance as a function object - obsolete!
+        Collections.sort(words, new Comparator<String>() {
+            public int compare(String s1, String s2) {
+                return Integer.compare(s1.length(), s2.length());
+            }
+        });
+        System.out.println(words);
+        Collections.shuffle(words);
+
+        // Lambda expression as function object (replaces anonymous class)
+        Collections.sort(words,
+                (s1, s2) -> Integer.compare(s1.length(), s2.length()));
+        System.out.println(words);
+        Collections.shuffle(words);
+
+        // Comparator construction method (with method reference) in place of lambda
+        Collections.sort(words, comparingInt(String::length));
+        System.out.println(words);
+        Collections.shuffle(words);
+
+        // Default method List.sort in conjunction with comparator construction method
+        words.sort(comparingInt(String::length));
+        System.out.println(words);
+    }
+}
+```
+
+## 34. Prefer method references over lambdas (not always)
+**RULE IS SIMPLE: Use method references where it is more readable and shorter.**
+```java
+public class Freq {
+    public static void main(String[] args) {
+        Map<String, Integer> frequencyTable = new TreeMap<>();
+
+        for (String s : args)
+            frequencyTable.merge(s, 1, (count, incr) -> count + incr); // Lambda
+        System.out.println(frequencyTable);
+
+        frequencyTable.clear();
+        for (String s : args)
+            frequencyTable.merge(s, 1, Integer::sum); // Method reference
+        System.out.println(frequencyTable);
+    }
+}
+```
+
+# 8. Methods
