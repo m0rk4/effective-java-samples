@@ -5,7 +5,7 @@ _Represents a diary in the format of git commits + README quick reference_
 
 _Some items / chapters were omitted since they were familiar to me_
 
-# CONTENTS:
+# Items:
 - [2. Creating and destroying objects](#2-creating-and-destroying-objects)
     - [1. Use static factory methods](#1-use-static-factory-methods)
     - [2. Use builder pattern when telescoping constructors faced](#2-use-builder-pattern-when-telescoping-constructors-faced)
