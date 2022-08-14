@@ -21,7 +21,14 @@ _Represents a diary in the format of git commits + README quick reference_
     - [13. Clone](#13-clone)
     - [14. Comparable](#14-comparable)
 - [4. Classes and interfaces](#4-classes-and-interfaces)
-
+    - [15. Minimize access](#15-minimize-access)
+    - [16. Use accessor methods](#16-use-accessor-methods)
+    - [17. Minimize mutability](#17-minimize-mutability)
+    - [18. Composition over inheritance <3](#18-composition-over-inheritance-3)
+    - [19. Design and document for inheritance (or else prohibit it :))](#19-design-and-document-for-inheritance-or-else-prohibit-it-)
+    - [20. Interfaces over abstract classes](#20-interfaces-over-abstract-classes)
+    - [21. Favor static member classes over nonstatic](#21-favor-static-member-classes-over-nonstatic)
+- [5. Generics](#5-generics)  
     
 # 2. Creating and destroying objects
 ## 1. Use static factory methods
@@ -243,4 +250,222 @@ Prefer using copy-constructors / copy-factories.
 * For floating-point fields use Float.compare or Double.compare.
 
 # 4. Classes and Interfaces
+## 15. Minimize access
+* Follow encapsulation;
+* Minimize access to class internals;
+* `public static final` allowed only (with not-mutable objects ofc)
+```java
+    // BAD!
+    public static final Thing[] THINGS = {};
 
+    // BETTER
+    private static final Thing[] PRIVATE_THINGS = {};
+    public static final List<Thing> THING_LIST = List.of(PRIVATE_THINGS);
+
+    // ONE MORE ALTERNATIVE
+    private static final Thing[] PRIVATE_THINGS_SECOND = {};
+
+    public static final Thing[] things() {
+        return PRIVATE_THINGS_SECOND.clone();
+    }
+```
+It is acceptable to make a private member of a public class package-private in order to test it.
+
+## 16. Use accessor methods
+* If a class is accessed outside its package, provide accessor methods.
+* If a class is `package-private` or is a `private nested class`, it's ok to expose its data fields.
+* In `public classes` it is a questionable option to expose immutable fields. 
+
+## 17. Minimize mutability
+* Class can be final because it has no public constructors;
+* Moreover its static factory can return subclasses (PACKAGE PRIVATE ONES, which is great, the client won't know);
+
+**Not-final classes are in danger (I am the danger, Skyler!)**
+```java
+    /*
+        1. Biginteger is not final, thus can be extended, which is dangerous
+        2. If your safety depends on Biginteger received from not trustable client, use such algo
+     */
+    public static BigInteger safeInstance(BigInteger bigInteger) {
+        if (bigInteger.getClass() == BigInteger.class) {
+            // safe, real biginteger
+            return bigInteger;
+        }
+        // subclass, we need protected copy
+        return new BigInteger(bigInteger.toByteArray());
+    }
+```
+
+Tip to force class finalization:
+```java
+    // Static factory, used in conjunction with private constructor
+    // Caching, etc. to minimize instantiation
+    public static AnotherComplex valueOf(double re, double im) {
+        return new AnotherComplex(re, im);
+    }
+```
+
+Tip for performance (see `BigInteger` for instance)
+```java
+    // Expose frequently used instances to minimize instantiation
+    public static final Complex ZERO = new Complex(0, 0);
+    public static final Complex ONE = new Complex(1, 0);
+    public static final Complex I = new Complex(0, 1);
+```
+
+## 18. Composition over inheritance <3
+**Inheritance violates encapsulation**
+
+Fragility causes
+1. A subclass depends on the implementation details of its superclass. If the superclass change the subclass may break.
+2. The superclass can acquire new methods in new releases that might not be added in the subclass.
+
+**Composition**
+Instead of extending, give your new class a private field that references an instance of the existing class.
+
+Decorator Pattern (Wrapper) in action!
+```java
+// Reusable forwarding class, simply forwards methods, api is strong and independent from impl.
+// Important fact is that it IMPLEMENTS, not extends
+public class ForwardingSet<E> implements Set<E> {
+    private final Set<E> s;
+    public ForwardingSet(Set<E> s) { this.s = s; }
+
+    public void clear()               { s.clear();            }
+    public boolean contains(Object o) { return s.contains(o); }
+    public boolean isEmpty()          { return s.isEmpty();   }
+    public int size()                 { return s.size();      }
+    public Iterator<E> iterator()     { return s.iterator();  }
+    public boolean add(E e)           { return s.add(e);      }
+    public boolean remove(Object o)   { return s.remove(o);   }
+    public boolean containsAll(Collection<?> c)
+    { return s.containsAll(c); }
+    public boolean addAll(Collection<? extends E> c)
+    { return s.addAll(c);      }
+    public boolean removeAll(Collection<?> c)
+    { return s.removeAll(c);   }
+    public boolean retainAll(Collection<?> c)
+    { return s.retainAll(c);   }
+    public Object[] toArray()          { return s.toArray();  }
+    public <T> T[] toArray(T[] a)      { return s.toArray(a); }
+    @Override public boolean equals(Object o)
+    { return s.equals(o);  }
+    @Override public int hashCode()    { return s.hashCode(); }
+    @Override public String toString() { return s.toString(); }
+}
+```
+```java
+// Decorator pattern in action!
+// Wrapper class - uses composition in place of inheritance
+// Now api is not broken
+public class InstrumentedSet<E> extends ForwardingSet<E> {
+    private int addCount = 0;
+
+    public InstrumentedSet(Set<E> s) {
+        super(s);
+    }
+
+    @Override public boolean add(E e) {
+        addCount++;
+        return super.add(e);
+    }
+    @Override public boolean addAll(Collection<? extends E> c) {
+        addCount += c.size();
+        return super.addAll(c);
+    }
+    public int getAddCount() {
+        return addCount;
+    }
+}
+
+```
+## 19. Design and document for inheritance (or else prohibit it :))
+* Good documentation should describe what component does, not how
+    * But in case of inheritance it is impossible to omit implementation details (see `@implSpec`)
+    * Also describe what overridable methods / constructors are being called
+* DO NOT CALL OVERRIDABLE METHODS IN CONSTRUCTORS
+    * SAME FOR `clone()` / `readObject()`
+* Hooks might be useful
+* Test your inheritance properly by writing subclasses
+
+## 20. Interfaces over abstract classes
+*Applications for abstract classes*
+```java
+/*
+ Skeletal implementation class is nice application for abstract classes
+ 1. define skeleton operations
+ 2. build functionality on skeleton operations
+ 3. inherit it and make work easier
+ P.S at the same time you can implement interface
+ */
+public abstract class AbstractMapEntry<K, V> implements Map.Entry<K, V> {
+
+    // Entries in a modifiable map must override this method
+    @Override
+    public V setValue(V value) {
+        throw new UnsupportedOperationException();
+    }
+
+    /*
+     Implements the general contract of Map.Entry.equals
+          We are not allowed to define default object methods impls in interfaces, so we do it here
+     */
+    @Override
+    public boolean equals(Object o) {
+        if (o == this)
+            return true;
+        if (!(o instanceof Map.Entry))
+            return false;
+        Map.Entry<?, ?> e = (Map.Entry) o;
+        return Objects.equals(e.getKey(), getKey())
+                && Objects.equals(e.getValue(), getValue());
+    }
+
+
+    /*
+     Implements the general contract of Map.Entry.hashCode
+     We are not allowed to define default object methods impls in interfaces, so we do it here
+     */
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(getKey())
+                ^ Objects.hashCode(getValue());
+    }
+
+    @Override
+    public String toString() {
+        return getKey() + "=" + getValue();
+    }
+}
+```
+```java
+        /*
+        Nice application of skeleton implementations!
+         */
+        return new AbstractList<>() {
+            @Override
+            public Integer get(int i) {
+                return a[i];  // Autoboxing, performance suffers :(
+            }
+
+            @Override
+            public Integer set(int i, Integer val) {
+                int oldVal = a[i];
+                a[i] = val;     // Auto-unboxing
+                return oldVal;  // Autoboxing
+            }
+
+            @Override
+            public int size() {
+                return a.length;
+            }
+        };
+```
+
+## 21. Favor static member classes over nonstatic
+1. Inner static class
+2. Inner non-static class
+3. Anonymous (see `IntArrays.java`)
+4. Local (Tuple record in java > 14?)
+
+# 5. Generics
