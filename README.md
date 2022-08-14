@@ -3,6 +3,8 @@ _Effective Java v3 / Programming Language Guide By Joshua Bloch / Samples with n
 
 _Represents a diary in the format of git commits + README quick reference_
 
+_Some items / chapters were omitted since they were familiar to me_
+
 # CONTENTS:
 - [2. Creating and destroying objects](#2-creating-and-destroying-objects)
     - [1. Use static factory methods](#1-use-static-factory-methods)
@@ -45,7 +47,10 @@ _Represents a diary in the format of git commits + README quick reference_
     - [33. Lambdas over anonymous classes](#33-lambdas-over-anonymous-classes)
     - [34. Prefer method references over lambdas (not always)](#34-prefer-method-references-over-lambdas-not-always)
 - [8. Methods](#8-methods)
-
+    - [35. Defensive copies](#35-defensive-copies)
+    - [36. Overload methods wisely](#36-overload-methods-wisely)
+    - [37. Varargs](#37-varargs)
+    
 # 2. Creating and destroying objects
 ## 1. Use static factory methods
 
@@ -978,3 +983,178 @@ public class Freq {
 ```
 
 # 8. Methods
+## 35. Defensive copies
+**Broken immutable class**
+```java
+public final class Period {
+    private final Date start;
+    private final Date end;
+
+    /**
+     * @param  start the beginning of the period
+     * @param  end the end of the period; must not precede start
+     * @throws IllegalArgumentException if start is after end
+     * @throws NullPointerException if start or end is null
+     */
+    public Period(Date start, Date end) {
+        if (start.compareTo(end) > 0)
+            throw new IllegalArgumentException(
+                    start + " after " + end);
+        this.start = start;
+        this.end   = end;
+    }
+
+    public Date start() {
+        return start;
+    }
+    public Date end() {
+        return end;
+    }
+
+    public String toString() {
+        return start + " - " + end;
+    }
+
+//    // Repaired constructor - makes defensive copies of parameters
+//    public Period(Date start, Date end) {
+//        this.start = new Date(start.getTime());
+//        this.end   = new Date(end.getTime());
+//
+    // PROTECTION AGAINST time-of-check time-of-use attack
+//        if (this.start.compareTo(this.end) > 0)
+//            throw new IllegalArgumentException(
+//                    this.start + " after " + this.end);
+//    }
+//
+//    // Repaired accessors - make defensive copies of internal fields
+//    public Date start() {
+//        return new Date(start.getTime());
+//    }
+//
+//    public Date end() {
+//        return new Date(end.getTime());
+//    }
+}
+```
+
+*Summary*
+* If class has mutable components, which it receives from client or returns them to client
+    defensive copy is required
+* If coping costs are too high AND class trusts clients
+    defensive coping can be replaced with DOCUMENTATION reflecting their responsibility 
+
+## 36. Overload methods wisely
+```java
+public class CollectionClassifier {
+    public static String classify(Set<?> s) {
+        return "Set";
+    }
+
+    public static String classify(List<?> lst) {
+        return "List";
+    }
+
+    public static String classify(Collection<?> c) {
+        return "Unknown Collection";
+    }
+
+    public static String classifyFixed(Collection<?> c) {
+        return c instanceof Set  ? "Set" :
+                c instanceof List ? "List" : "Unknown Collection";
+    }
+
+    public static void main(String[] args) {
+        Collection<?>[] collections = {
+                new HashSet<String>(),
+                new ArrayList<BigInteger>(),
+                new HashMap<String, String>().values()
+        };
+
+        // Will print collection because overloading choice is being made on COMPILATION STAGE!
+        // On compilation it is Collection<?> as seen
+        for (Collection<?> c : collections)
+            System.out.println(classify(c));
+    }
+}
+```
+
+**Overriding**
+```java
+public class Wine {
+    String name() {
+        return "wine";
+    }
+}
+class Champagne extends SparklingWine {
+    @Override String name() { return "champagne"; }
+}
+class SparklingWine extends Wine {
+    @Override
+    String name() {
+        return "sparkling wine";
+    }
+}
+// Classification using method overriding
+public class Overriding {
+    public static void main(String[] args) {
+        List<Wine> wineList = List.of(
+                new Wine(), new SparklingWine(), new Champagne());
+
+        // Will print 'wine' 'champagne' etc.
+        // Because implementation of overridden methods is selected dynamically!
+        for (Wine wine : wineList)
+            System.out.println(wine.name());
+    }
+}
+```
+
+* Prefer not to export two overloads with same amount of params!!!
+
+## 37. Varargs
+*Example that describes tips*
+```java
+public class Varargs {
+    // Simple use of varargs
+    static int sum(int... args) {
+        int sum = 0;
+        for (int arg : args)
+            sum += arg;
+        return sum;
+    }
+
+//    // The WRONG way to use varargs to pass one or more arguments!
+//    static int min(int... args) {
+//        if (args.length == 0)
+//            throw new IllegalArgumentException("Too few arguments");
+//        int min = args[0];
+//        for (int i = 1; i < args.length; i++)
+//            if (args[i] < min)
+//                min = args[i];
+//        return min;
+//    }
+
+    /*
+    NO NEED TO CHECK FOR SIZE == 0!
+    METHOD SIGNATURE GUARANTEES that at least one param exists!
+     */
+    // The right way to use varargs to pass one or more arguments
+    static int min(int firstArg, int... remainingArgs) {
+        int min = firstArg;
+        for (int arg : remainingArgs)
+            if (arg < min)
+                min = arg;
+        return min;
+    }
+
+    public static void main(String[] args) {
+        System.out.println(sum(1, 2, 3, 4, 5, 6, 7, 8, 9, 10));
+        System.out.println(min(1, 2, 3, 4, 5, 6, 7, 8, 9, 10));
+
+        /*
+        PAY ATTENTION THAT IT IS NOT VARARGS!
+        It is simple overloading with N params (x) (x, x) etc.
+         */
+        List.of(1,23,4,5);
+    }
+}
+```
