@@ -29,6 +29,11 @@ _Represents a diary in the format of git commits + README quick reference_
     - [20. Interfaces over abstract classes](#20-interfaces-over-abstract-classes)
     - [21. Favor static member classes over nonstatic](#21-favor-static-member-classes-over-nonstatic)
 - [5. Generics](#5-generics)  
+    - [22. Lists over arrays](#22-lists-over-arrays)
+    - [23. Prefer generic methods](#23-prefer-generic-methods)
+    - [24. Type bound with wildcards](#24-type-bound-with-wildcards)
+    - [25. Typesafe heterogeneous containers](#25-typesafe-heterogeneous-containers)
+- [6. Enums and annotations](#6-enums-and-annotations)
     
 # 2. Creating and destroying objects
 ## 1. Use static factory methods
@@ -469,3 +474,112 @@ public abstract class AbstractMapEntry<K, V> implements Map.Entry<K, V> {
 4. Local (Tuple record in java > 14?)
 
 # 5. Generics
+| **Term**                | **Example**                        |**Item**|
+|-------------------------|------------------------------------|--------|
+| Parametrized type       | `List<String>`                     | 23     |
+| Actual type parameter   | `String`                           | 23     |
+| Generic type            | `List<E>`                          | 23, 26 |
+| Formal type parameter   | `E`                                | 23     |
+| Unbounded wildcard type | `List<?>`                          | 23     |
+| Raw type                | `List`                             | 23     |
+| Bounded type parameter  | `<E extends Number>`               | 26     |
+| Recursive type bound    | `<T extends Comparable<T>>`        | 27     |
+| Bounded wildcard type   | `List<? extends Number>`           | 28     |
+| Generic method          | `static <E> List<E> asList(E[] a)` | 27     |
+| Type token              | `String.class`                     | 29     |
+
+## 22. Lists over arrays
+Arrays are _covariant_: if `Sub` is a subtype of `Super`, `Sub[]` is a subtype of `Super[]`  
+Generics are _invariant_: for any two types `Type1` and `Type2`, `List<Type1>` in neither  sub or super type of `List<Type2>`
+
+```java
+	// Fails at runtime
+	Object[] objectArray = new Long[1];
+	objectArray[0] ="I don't fit in" // Throws ArrayStoreException
+
+	// Won't compile
+	List<Object> ol = new ArrayList<Long>();//Incompatible types
+	ol.add("I don't fit in")
+```
+
+Arrays are _reified_: Arrays know and enforce their element types at runtime.
+Generics are _erasure_: Enforce their type constrains only at compile time and discard (or _erase_) their element type information at runtime.
+
+Therefore it is illegal to create an array of a generic type, a parameterized type or a type parameter.
+
+`new List<E>[]`, `new List<String>[]`, `new E[]`  will result in _generic array creation_ errors.
+
+## 23. Prefer generic methods
+```java
+    // Generic singleton factory pattern
+    private static final UnaryOperator<Object> IDENTITY_FN = (t) -> t;
+
+    @SuppressWarnings("unchecked")
+    public static <T> UnaryOperator<T> identityFunction() {
+        return (UnaryOperator<T>) IDENTITY_FN;
+    }
+```
+```java
+// Using a recursive type bound to express mutual comparability
+public class RecursiveTypeBound {
+    // Returns max value in a collection - uses recursive type bound
+    public static <E extends Comparable<E>> E max(Collection<E> c) {
+```
+
+## 24. Type bound with wildcards
+```java
+    /**
+     * Similar to Collections.max
+     */
+    public static <E extends Comparable<? super E>> E max(
+            List<? extends E> list) {
+```
+
+**PECS: producer-extends, consumer-super**
+
+```java
+    // Wildcard type for parameter that serves as an E producer
+    public void pushAll(Iterable<? extends E> src) {
+        for (E e : src)
+            push(e);
+    }
+```
+```java
+    // Wildcard type for parameter that serves as an E consumer
+    public void popAll(Collection<? super E> dst) {
+        while (!isEmpty())
+            dst.add(pop());
+    }
+```
+**Never use wildcards in return values.**
+
+**Wildcard capture**
+```java
+    public static void swap(List<?> list, int i, int j) {
+        swapHelper(list, i, j);
+    }
+
+    // Private helper method for wildcard capture
+    private static <E> void swapHelper(List<E> list, int i, int j) {
+        list.set(i, list.set(j, list.get(i)));
+    }
+```
+
+## 25. Typesafe heterogeneous containers
+```java
+    public class Favorites{
+		private Map<Class<?>, Object> favorites = new HashMap<Class<?>, Object>();
+
+		public <T> void putFavorites(Class<T> type, T instance){
+			if(type == null)
+				throw new NullPointerException("Type is null");
+			favorites.put(type, type.cast(instance));//runtime safety with a dynamic cast
+		}
+
+		public <T> getFavorite(Class<T> type){
+			return type.cast(favorites.get(type));
+		}
+	}
+```
+
+# 6. Enums and Annotations
