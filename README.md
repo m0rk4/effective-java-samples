@@ -66,6 +66,8 @@ _Some items / chapters were omitted since they were familiar to me_
     - [49. Prefer executors and tasks to threads](#49-prefer-executors-and-tasks-to-threads)
     - [50. Prefer concurrency utilities to wait() and notify()](#50-prefer-concurrency-utilities-to-wait-and-notify)
     - [51. Document thread safety](#51-document-thread-safety)
+    - [52. Use lazy initialization judiciously](#52-use-lazy-initialization-judiciously)
+    
 # 2. Creating and destroying objects
 ## 1. Use static factory methods
 
@@ -1431,5 +1433,62 @@ Use private lock object idiom to prevent users to hold the lock for a long perio
 		synchronized(lock) {
 			...
 		}
+	}
+```
+
+## 52. Use lazy initialization judiciously
+Use it if a field is accessed only on a fraction of the instances of a class and it is costly to initialize the field.  
+It decreases the cost of initializing a class or creating an instance, but increase the cost of accessing it.  
+For multiple threads, lazy initialization is tricky.  
+
+```java
+	// Normal initialization of an instance field
+	private final FieldType field = computeFieldValue();
+
+```
+To break an initialization circularity: **synchronized accessor**
+```java
+	// Lazy initialization of instance field - synchronized accessor
+	private FieldType field;
+	synchronized FieldType getField() {
+		if (field == null)
+			field = computeFieldValue();
+		return field;
+	}
+```
+For performance on a static field: **lazy initialization holder class idiom**, adds practically nothing to the cost of access.
+```java
+	// Lazy initialization holder class idiom for static fields
+	private static class FieldHolder {
+		static final FieldType field = computeFieldValue();
+	}
+	static FieldType getField() { return FieldHolder.field; }
+```
+
+For performance on an instance field: **double-check idiom**.
+```java
+	// Double-check idiom for lazy initialization of instance fields
+	private volatile FieldType field;
+	FieldType getField() {
+		FieldType result = field;
+		if (result == null) { // First check (no locking)
+			synchronized(this) {
+				result = field;
+				if (result == null) // Second check (with locking)
+					field = result = computeFieldValue();
+			}
+		}
+	return result;
+	}
+```
+Instance field that can tolerate repeated initialization: **single-check idiom.**
+```java
+	// Single-check idiom - can cause repeated initialization!
+	private volatile FieldType field;
+	private FieldType getField() {
+		FieldType result = field;
+		if (result == null)
+			field = result = computeFieldValue();
+		return result;
 	}
 ```
