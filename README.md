@@ -65,6 +65,7 @@ _Some items / chapters were omitted since they were familiar to me_
     - [48. Avoid excessive synchronization](#48-avoid-excessive-synchronization)
     - [49. Prefer executors and tasks to threads](#49-prefer-executors-and-tasks-to-threads)
     - [50. Prefer concurrency utilities to wait() and notify()](#50-prefer-concurrency-utilities-to-wait-and-notify)
+    - [51. Document thread safety](#51-document-thread-safety)
 # 2. Creating and destroying objects
 ## 1. Use static factory methods
 
@@ -1406,3 +1407,29 @@ items as they become available. ExecutorService implementations, including Threa
 
 Use always use _notifyAll_ (and not forget to use the wait loop explained before)
 You may wake some other threads, but these threads will check the condition for which they're waiting and, finding it false, will continue waiting.
+
+## 51. Document thread safety
+Looking for  the synchronized modifier in a method declaration is an implementation detail.
+To enable safe concurrent use, a class must clearly document what level of thread safety it supports.
+
+* immutable: No external synchronization is necessary (i.e. String, Long, BigInteger)
+* unconditionally thread-safe: mutable but with internal synchronization. No need for external synchronization (i.e. Random, ConcurrentHashMap)
+* conditionally thread-safe: some methods require external synchronization.(i.e. Collections.synchronized wrappers)
+* not thread-safe: external synchronization needed (i.e. ArrayList, HashMap.)
+* thread-hostile: not safe for concurrent use
+
+Thread safety annotations are `@Immutable`, `@ThreadSafe`, and `@NotThreadSafe`.
+To document a conditionally thread-safe class indicate which invocation sequences require external synchronization, and which lock  must be acquired to execute these sequences.
+
+Use private lock object idiom to prevent users to hold the lock for a long period of time in unconditionally thread-safe classes.
+
+```java
+	// Private lock object idiom - twarts denial-of-service attack
+	private final Object lock = new Object();
+
+	public void foo() {
+		synchronized(lock) {
+			...
+		}
+	}
+```
