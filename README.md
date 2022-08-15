@@ -67,6 +67,7 @@ _Some items / chapters were omitted since they were familiar to me_
     - [50. Prefer concurrency utilities to wait() and notify()](#50-prefer-concurrency-utilities-to-wait-and-notify)
     - [51. Document thread safety](#51-document-thread-safety)
     - [52. Use lazy initialization judiciously](#52-use-lazy-initialization-judiciously)
+    - [53. Don't depend on thread scheduler](#53-dont-depend-on-thread-scheduler)
     
 # 2. Creating and destroying objects
 ## 1. Use static factory methods
@@ -1492,3 +1493,14 @@ Instance field that can tolerate repeated initialization: **single-check idiom.*
 		return result;
 	}
 ```
+
+## 53. Don't depend on thread scheduler
+Thread scheduler determines which runnable, get to run, and for how long.Operating systems will try to make this
+determination fairly, but the policy can vary. So any program that relies on the thread scheduler for correctness or performance is likely to be non portable.   
+To ensure that the average number of runnable threads is not significantly greater than the number of processors.
+Threads should not run if they aren't doing useful work,
+tasks should be:
+
+* reasonably small but not too small or dispatching overhead
+* independent of one another
+* not implement busy-wait
