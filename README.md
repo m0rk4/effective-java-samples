@@ -62,7 +62,7 @@ _Some items / chapters were omitted since they were familiar to me_
     - [46. Don't ignore exceptions](#46-dont-ignore-exceptions)
 - [10. Concurrency](#10-concurrency)
     - [47. Synchronize access to shared mutable data](#47-synchronize-access-to-shared-mutable-data)
-    
+    - [48. Avoid excessive synchronization](#48-avoid-excessive-synchronization)
 # 2. Creating and destroying objects
 ## 1. Use static factory methods
 
@@ -1324,3 +1324,30 @@ Synchronization is required for reliable communication between threads as well a
 _In general:_ When multiple threads share mutable data, each thread that reads or writes the data must perform synchronization
 
 _Best thing to do:_ **Not share mutable data.**
+
+## 48. Avoid excessive synchronization
+Inside a synchronized region, do not invoke a  method (_alien_) that is designed to be overridden, or one provided by a client in the form of a function object ([Item 21](#21-use-function-objects-to-represent-strategies)). Calling it from a synchronized region can cause exceptions,
+deadlocks, or data corruption.
+Move alien method invocations out of synchronized blocks. Taking a “snapshot” of the object that can then be safely traversed without a lock.
+
+```java
+
+	// Alien method moved outside of synchronized block - open calls
+	private void notifyElementAdded(E element) {
+		List<SetObserver<E>> snapshot = null;
+		synchronized(observers) {
+			snapshot = new ArrayList<SetObserver<E>>(observers);
+		}
+		for (SetObserver<E> observer : snapshot)
+			observer.added(this, element);
+	}
+```
+Or use a _concurrent collection_ known as CopyOnWriteArrayList. It is a variant of ArrayList in which all write operations are implemented by making a fresh copy of the entire underlying array.
+The internal array is never modified and iteration requires no locking.
+
+**open call**: An alien method invoked outside of a synchronized region
+
+_As Rule_:
+
+* **do as little work as possible inside synchronized regions**
+* **limit the amount of work that you do from within synchronized regions**
