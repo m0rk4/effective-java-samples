@@ -64,6 +64,7 @@ _Some items / chapters were omitted since they were familiar to me_
     - [47. Synchronize access to shared mutable data](#47-synchronize-access-to-shared-mutable-data)
     - [48. Avoid excessive synchronization](#48-avoid-excessive-synchronization)
     - [49. Prefer executors and tasks to threads](#49-prefer-executors-and-tasks-to-threads)
+    - [50. Prefer concurrency utilities to wait() and notify()](#50-prefer-concurrency-utilities-to-wait-and-notify)
 # 2. Creating and destroying objects
 ## 1. Use static factory methods
 
@@ -1374,3 +1375,34 @@ For heavily loaded application, use: `Executors.newFixedThreadPool`
 * Callable, similar to Runnable but returns a value
 
 Make use `ForkJoinPool`!
+
+## 50. Prefer concurrency utilities to wait() and notify()
+Given the difficulty of using wait and notify correctly, you should use the higher-level concurrency utilities instead.
+
+* Executor Framework
+* Concurrent Collections
+* Synchronizers
+
+**Concurrent Collections**: High-performance concurrent implementations of standard collection interfaces (List, Queue, and Map)  
+Use concurrent collections in preference to externally synchronized collections   
+Some interfaces have been extended with blocking operations, which wait (or block) until they can be successfully performed. This allows blocking queues to be used for work queues ( _producer-consumer queues_). One or more producer threads enqueue work items and from which one or more consumer threads dequeue and process
+items as they become available. ExecutorService implementations, including ThreadPoolExecutor, use a BlockingQueue.
+
+**Synchronizers**: objects that enable threads to wait for one another, allowing them to coordinate their activities (CountDownLatch, Semaphore, CyclicBarrier, Exchanger, Phaser)
+
+**wait**: Always use the wait loop idiom to invoke the wait method; never invoke it outside of a loop. The loop serves to test the condition before and after waiting.
+```java
+	// The standard idiom for using the wait method
+	synchronized (obj) {
+		while (<condition does not hold>){
+			obj.wait(); // (Releases lock, and reacquires on wakeup)
+		}
+		... // Perform action appropriate to condition
+	}
+```
+**notify**: Wakes a single waiting thread, assuming such a thread exists.
+
+**notifyAll**: Wakes all waiting threads.
+
+Use always use _notifyAll_ (and not forget to use the wait loop explained before)
+You may wake some other threads, but these threads will check the condition for which they're waiting and, finding it false, will continue waiting.
