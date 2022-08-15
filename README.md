@@ -63,6 +63,7 @@ _Some items / chapters were omitted since they were familiar to me_
 - [10. Concurrency](#10-concurrency)
     - [47. Synchronize access to shared mutable data](#47-synchronize-access-to-shared-mutable-data)
     - [48. Avoid excessive synchronization](#48-avoid-excessive-synchronization)
+    - [49. Prefer executors and tasks to threads](#49-prefer-executors-and-tasks-to-threads)
 # 2. Creating and destroying objects
 ## 1. Use static factory methods
 
@@ -1351,3 +1352,25 @@ _As Rule_:
 
 * **do as little work as possible inside synchronized regions**
 * **limit the amount of work that you do from within synchronized regions**
+
+## 49. Prefer executors and tasks to threads
+ExecutorService possibilities:
+
+* wait for a particular task to complete: `background thread SetObserver`
+* wait for any or all of a collection of tasks to complete: `invokeAny` or `invokeAll`
+* wait for the executor service's graceful termination to complete: `awaitTermination`
+* retrieve the results of tasks one by one as they complete: `ExecutorCompletionService`
+*...
+
+For more than one thread use a _thread pool_.
+For lightly loaded application, use: `Executors.new-CachedThreadPool`
+For heavily loaded application, use: `Executors.newFixedThreadPool`
+
+**executor service**: mechanism for executing tasks
+
+**task**: unit of work. Two types.
+
+* Runnable
+* Callable, similar to Runnable but returns a value
+
+Make use `ForkJoinPool`!
