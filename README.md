@@ -60,6 +60,14 @@ _Some items / chapters were omitted since they were familiar to me_
     - [44. Include failure-capture information in detail messages](#44-include-failure-capture-information-in-detail-messages)
     - [45. Strive for failure atomicity](#45-strive-for-failure-atomicity)
     - [46. Don't ignore exceptions](#46-dont-ignore-exceptions)
+- [10. Concurrency](#10-concurrency)
+    - [47. Synchronize access to shared mutable data](#47-synchronize-access-to-shared-mutable-data)
+    - [48. Avoid excessive synchronization](#48-avoid-excessive-synchronization)
+    - [49. Prefer executors and tasks to threads](#49-prefer-executors-and-tasks-to-threads)
+    - [50. Prefer concurrency utilities to wait() and notify()](#50-prefer-concurrency-utilities-to-wait-and-notify)
+    - [51. Document thread safety](#51-document-thread-safety)
+    - [52. Use lazy initialization judiciously](#52-use-lazy-initialization-judiciously)
+    - [53. Don't depend on thread scheduler](#53-dont-depend-on-thread-scheduler)
     
 # 2. Creating and destroying objects
 ## 1. Use static factory methods
@@ -1307,3 +1315,192 @@ Options to achieve this:
 	} catch (SomeException e) {
 	}
 ```
+
+# 10. Concurrency
+## 47. Synchronize access to shared mutable data
+In Java reading or writing a variable is atomic unless type `long` or `double`, but for all atomic operations it does not guarantee that a value written by one thread will be visible to another.
+
+Synchronization is required for reliable communication between threads as well as for mutual exclusion.
+
+**Effectively immutable**: data object  modified by one thread to modify shared it with other threads, synchronizing only the act of sharing the object reference. Other threads can then read the object without further synchronization, so long as it isn't modified again.
+
+**Safe publication**: Transferring such an object reference from one thread to others.
+
+
+_In general:_ When multiple threads share mutable data, each thread that reads or writes the data must perform synchronization
+
+_Best thing to do:_ **Not share mutable data.**
+
+## 48. Avoid excessive synchronization
+Inside a synchronized region, do not invoke a  method (_alien_) that is designed to be overridden, or one provided by a client in the form of a function object ([Item 21](#21-use-function-objects-to-represent-strategies)). Calling it from a synchronized region can cause exceptions,
+deadlocks, or data corruption.
+Move alien method invocations out of synchronized blocks. Taking a “snapshot” of the object that can then be safely traversed without a lock.
+
+```java
+
+	// Alien method moved outside of synchronized block - open calls
+	private void notifyElementAdded(E element) {
+		List<SetObserver<E>> snapshot = null;
+		synchronized(observers) {
+			snapshot = new ArrayList<SetObserver<E>>(observers);
+		}
+		for (SetObserver<E> observer : snapshot)
+			observer.added(this, element);
+	}
+```
+Or use a _concurrent collection_ known as CopyOnWriteArrayList. It is a variant of ArrayList in which all write operations are implemented by making a fresh copy of the entire underlying array.
+The internal array is never modified and iteration requires no locking.
+
+**open call**: An alien method invoked outside of a synchronized region
+
+_As Rule_:
+
+* **do as little work as possible inside synchronized regions**
+* **limit the amount of work that you do from within synchronized regions**
+
+## 49. Prefer executors and tasks to threads
+ExecutorService possibilities:
+
+* wait for a particular task to complete: `background thread SetObserver`
+* wait for any or all of a collection of tasks to complete: `invokeAny` or `invokeAll`
+* wait for the executor service's graceful termination to complete: `awaitTermination`
+* retrieve the results of tasks one by one as they complete: `ExecutorCompletionService`
+*...
+
+For more than one thread use a _thread pool_.
+For lightly loaded application, use: `Executors.new-CachedThreadPool`
+For heavily loaded application, use: `Executors.newFixedThreadPool`
+
+**executor service**: mechanism for executing tasks
+
+**task**: unit of work. Two types.
+
+* Runnable
+* Callable, similar to Runnable but returns a value
+
+Make use `ForkJoinPool`!
+
+## 50. Prefer concurrency utilities to wait() and notify()
+Given the difficulty of using wait and notify correctly, you should use the higher-level concurrency utilities instead.
+
+* Executor Framework
+* Concurrent Collections
+* Synchronizers
+
+**Concurrent Collections**: High-performance concurrent implementations of standard collection interfaces (List, Queue, and Map)  
+Use concurrent collections in preference to externally synchronized collections   
+Some interfaces have been extended with blocking operations, which wait (or block) until they can be successfully performed. This allows blocking queues to be used for work queues ( _producer-consumer queues_). One or more producer threads enqueue work items and from which one or more consumer threads dequeue and process
+items as they become available. ExecutorService implementations, including ThreadPoolExecutor, use a BlockingQueue.
+
+**Synchronizers**: objects that enable threads to wait for one another, allowing them to coordinate their activities (CountDownLatch, Semaphore, CyclicBarrier, Exchanger, Phaser)
+
+**wait**: Always use the wait loop idiom to invoke the wait method; never invoke it outside of a loop. The loop serves to test the condition before and after waiting.
+```java
+	// The standard idiom for using the wait method
+	synchronized (obj) {
+		while (<condition does not hold>){
+			obj.wait(); // (Releases lock, and reacquires on wakeup)
+		}
+		... // Perform action appropriate to condition
+	}
+```
+**notify**: Wakes a single waiting thread, assuming such a thread exists.
+
+**notifyAll**: Wakes all waiting threads.
+
+Use always use _notifyAll_ (and not forget to use the wait loop explained before)
+You may wake some other threads, but these threads will check the condition for which they're waiting and, finding it false, will continue waiting.
+
+## 51. Document thread safety
+Looking for  the synchronized modifier in a method declaration is an implementation detail.
+To enable safe concurrent use, a class must clearly document what level of thread safety it supports.
+
+* immutable: No external synchronization is necessary (i.e. String, Long, BigInteger)
+* unconditionally thread-safe: mutable but with internal synchronization. No need for external synchronization (i.e. Random, ConcurrentHashMap)
+* conditionally thread-safe: some methods require external synchronization.(i.e. Collections.synchronized wrappers)
+* not thread-safe: external synchronization needed (i.e. ArrayList, HashMap.)
+* thread-hostile: not safe for concurrent use
+
+Thread safety annotations are `@Immutable`, `@ThreadSafe`, and `@NotThreadSafe`.
+To document a conditionally thread-safe class indicate which invocation sequences require external synchronization, and which lock  must be acquired to execute these sequences.
+
+Use private lock object idiom to prevent users to hold the lock for a long period of time in unconditionally thread-safe classes.
+
+```java
+	// Private lock object idiom - twarts denial-of-service attack
+	private final Object lock = new Object();
+
+	public void foo() {
+		synchronized(lock) {
+			...
+		}
+	}
+```
+
+## 52. Use lazy initialization judiciously
+Use it if a field is accessed only on a fraction of the instances of a class and it is costly to initialize the field.  
+It decreases the cost of initializing a class or creating an instance, but increase the cost of accessing it.  
+For multiple threads, lazy initialization is tricky.  
+
+```java
+	// Normal initialization of an instance field
+	private final FieldType field = computeFieldValue();
+
+```
+To break an initialization circularity: **synchronized accessor**
+```java
+	// Lazy initialization of instance field - synchronized accessor
+	private FieldType field;
+	synchronized FieldType getField() {
+		if (field == null)
+			field = computeFieldValue();
+		return field;
+	}
+```
+For performance on a static field: **lazy initialization holder class idiom**, adds practically nothing to the cost of access.
+```java
+	// Lazy initialization holder class idiom for static fields
+	private static class FieldHolder {
+		static final FieldType field = computeFieldValue();
+	}
+	static FieldType getField() { return FieldHolder.field; }
+```
+
+For performance on an instance field: **double-check idiom**.
+```java
+	// Double-check idiom for lazy initialization of instance fields
+	private volatile FieldType field;
+	FieldType getField() {
+		FieldType result = field;
+		if (result == null) { // First check (no locking)
+			synchronized(this) {
+				result = field;
+				if (result == null) // Second check (with locking)
+					field = result = computeFieldValue();
+			}
+		}
+	return result;
+	}
+```
+Instance field that can tolerate repeated initialization: **single-check idiom.**
+```java
+	// Single-check idiom - can cause repeated initialization!
+	private volatile FieldType field;
+	private FieldType getField() {
+		FieldType result = field;
+		if (result == null)
+			field = result = computeFieldValue();
+		return result;
+	}
+```
+
+## 53. Don't depend on thread scheduler
+Thread scheduler determines which runnable, get to run, and for how long.Operating systems will try to make this
+determination fairly, but the policy can vary. So any program that relies on the thread scheduler for correctness or performance is likely to be non portable.   
+To ensure that the average number of runnable threads is not significantly greater than the number of processors.
+Threads should not run if they aren't doing useful work,
+tasks should be:
+
+* reasonably small but not too small or dispatching overhead
+* independent of one another
+* not implement busy-wait
