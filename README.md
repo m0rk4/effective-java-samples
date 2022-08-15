@@ -60,6 +60,8 @@ _Some items / chapters were omitted since they were familiar to me_
     - [44. Include failure-capture information in detail messages](#44-include-failure-capture-information-in-detail-messages)
     - [45. Strive for failure atomicity](#45-strive-for-failure-atomicity)
     - [46. Don't ignore exceptions](#46-dont-ignore-exceptions)
+- [10. Concurrency](#10-concurrency)
+    - [47. Synchronize access to shared mutable data](#47-synchronize-access-to-shared-mutable-data)
     
 # 2. Creating and destroying objects
 ## 1. Use static factory methods
@@ -1307,3 +1309,18 @@ Options to achieve this:
 	} catch (SomeException e) {
 	}
 ```
+
+# 10. Concurrency
+## 47. Synchronize access to shared mutable data
+In Java reading or writing a variable is atomic unless type `long` or `double`, but for all atomic operations it does not guarantee that a value written by one thread will be visible to another.
+
+Synchronization is required for reliable communication between threads as well as for mutual exclusion.
+
+**Effectively immutable**: data object  modified by one thread to modify shared it with other threads, synchronizing only the act of sharing the object reference. Other threads can then read the object without further synchronization, so long as it isn't modified again.
+
+**Safe publication**: Transferring such an object reference from one thread to others.
+
+
+_In general:_ When multiple threads share mutable data, each thread that reads or writes the data must perform synchronization
+
+_Best thing to do:_ **Not share mutable data.**
